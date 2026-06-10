@@ -1,6 +1,6 @@
 {
   "name": "obsghsync",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sync your Obsidian vault to and from GitHub on all platforms (including iPadOS/iOS) using isomorphic-git.",
   "main": "main.js",
   "scripts": {
