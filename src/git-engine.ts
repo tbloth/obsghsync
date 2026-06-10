@@ -69,6 +69,32 @@ export class GitEngine {
     }
   }
 
+  /**
+   * Ensure the working tree is on the configured branch. Lets the user change
+   * the Branch setting and re-run Setup without recreating the repo (e.g. to
+   * sync to a non-default branch that side-steps default-branch rulesets).
+   */
+  private async ensureOnBranch(): Promise<void> {
+    if (!(await this.hasCommits())) return;
+    const current = await git.currentBranch({
+      ...this.common,
+      fullname: false,
+    });
+    if (current === this.settings.branch) return;
+
+    const branches = await git.listBranches(this.common);
+    if (branches.includes(this.settings.branch)) {
+      await git.checkout({ ...this.common, ref: this.settings.branch });
+    } else {
+      // Create the branch at the current HEAD and switch to it.
+      await git.branch({
+        ...this.common,
+        ref: this.settings.branch,
+        checkout: true,
+      });
+    }
+  }
+
   /** Initialize the repo (if needed), wire up the remote, and merge remote state. */
   async setup(): Promise<string> {
     this.requireConfig();
@@ -86,6 +112,8 @@ export class GitEngine {
     if (staged > 0 || !(await this.hasCommits())) {
       await this.commit();
     }
+
+    await this.ensureOnBranch();
 
     await git.fetch({
       ...this.common,
