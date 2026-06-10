@@ -1,8 +1,8 @@
-import { DataAdapter, Notice } from "obsidian";
+import { DataAdapter, Notice, requestUrl } from "obsidian";
 import git from "isomorphic-git";
 import { Buffer } from "buffer";
 import { createFs, ObsidianFs } from "./fs-adapter";
-import { http } from "./http-client";
+import { createHttp } from "./http-client";
 import { ChangedFile, GhSyncSettings, SyncResult } from "./types";
 
 // isomorphic-git expects a global Buffer in some code paths.
@@ -25,6 +25,10 @@ export class GitEngine {
 
   private get common() {
     return { fs: this.fs, dir: DIR };
+  }
+
+  private get http() {
+    return createHttp(this.settings.token);
   }
 
   private onAuth = () => ({
@@ -84,7 +88,7 @@ export class GitEngine {
 
     await git.fetch({
       ...this.common,
-      http,
+      http: this.http,
       remote: REMOTE,
       onAuth: this.onAuth,
       singleBranch: true,
@@ -112,7 +116,7 @@ export class GitEngine {
     try {
       await git.fetch({
         ...this.common,
-        http,
+        http: this.http,
         remote: REMOTE,
         onAuth: this.onAuth,
         singleBranch: true,
@@ -128,7 +132,7 @@ export class GitEngine {
     try {
       const res = await git.push({
         ...this.common,
-        http,
+        http: this.http,
         remote: REMOTE,
         ref: this.settings.branch,
         onAuth: this.onAuth,
@@ -277,6 +281,96 @@ export class GitEngine {
     if (!this.settings.repoUrl) throw new Error("Repository URL is not set.");
     if (!this.settings.token) throw new Error("Personal Access Token is not set.");
   }
+
+  /**
+   * Diagnose auth/permissions against the GitHub REST API. Returns a
+   * human-readable summary that pinpoints token, identity and access issues
+   * (the usual cause of a 403 during sync).
+   */
+  async testConnection(): Promise<string> {
+    this.requireConfig();
+    const { owner, repo } = parseRepo(this.settings.repoUrl);
+    const headers = {
+      Authorization: `Bearer ${this.settings.token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "obsghsync",
+    };
+
+    const who = await requestUrl({
+      url: "https://api.github.com/user",
+      headers,
+      throw: false,
+    });
+    if (who.status === 401) {
+      return "Token rejected (401). The Personal Access Token is invalid or expired.";
+    }
+    const login =
+      who.status === 200 && who.json ? who.json.login : `(status ${who.status})`;
+
+    const repoRes = await requestUrl({
+      url: `https://api.github.com/repos/${owner}/${repo}`,
+      headers,
+      throw: false,
+    });
+
+    const sso =
+      repoRes.headers?.["x-github-sso"] || repoRes.headers?.["X-GitHub-SSO"];
+
+    if (repoRes.status === 200 && repoRes.json) {
+      const perms = repoRes.json.permissions || {};
+      return (
+        `Authenticated as "${login}". Repo ${owner}/${repo}: ` +
+        `pull=${!!perms.pull}, push=${!!perms.push}.` +
+        (!perms.push
+          ? " ⚠️ No push permission — token needs Contents: read & write."
+          : " ✅ Ready to sync.")
+      );
+    }
+
+    let message = "";
+    try {
+      message = repoRes.json?.message || "";
+    } catch {
+      /* ignore */
+    }
+
+    if (repoRes.status === 404) {
+      return (
+        `Authenticated as "${login}", but ${owner}/${repo} is not visible ` +
+        `(404). Either the repo path is wrong, it is private and this token ` +
+        `lacks access, or the token belongs to a different account.` +
+        (sso ? ` SSO authorization required: ${sso}` : "")
+      );
+    }
+    if (repoRes.status === 403) {
+      return (
+        `Authenticated as "${login}", but access to ${owner}/${repo} is ` +
+        `forbidden (403).${message ? " " + message : ""}` +
+        (sso
+          ? ` This org enforces SSO — authorize the token: ${sso}`
+          : " Likely the token lacks repo access, lacks Contents write, or the " +
+            "org/EMU policy blocks it.")
+      );
+    }
+    return `Repo check failed: HTTP ${repoRes.status}${message ? " — " + message : ""} (authenticated as "${login}").`;
+  }
+}
+
+/** Parse owner/repo from an HTTPS GitHub URL. */
+function parseRepo(url: string): { owner: string; repo: string } {
+  const cleaned = url
+    .trim()
+    .replace(/^git\+/, "")
+    .replace(/\.git$/, "")
+    .replace(/\/$/, "");
+  const m = cleaned.match(/github\.com[/:]([^/]+)\/(.+)$/i);
+  if (!m) {
+    throw new Error(
+      `Could not parse owner/repo from "${url}". Use an HTTPS URL like https://github.com/owner/repo.git`,
+    );
+  }
+  return { owner: m[1], repo: m[2] };
 }
 
 function errMsg(e: unknown): string {

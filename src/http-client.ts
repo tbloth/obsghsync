@@ -44,34 +44,67 @@ async function collectBody(
   return out.buffer;
 }
 
-const httpImpl = {
-  async request(req: GitHttpRequest): Promise<GitHttpResponse> {
-    const { url, method = "GET", headers = {} } = req;
-    const body = await collectBody(req.body);
+function authHeader(token: string): string {
+  // GitHub accepts the PAT as the username over HTTP Basic auth.
+  return "Basic " + btoa(token + ":x-oauth-basic");
+}
 
-    const res = await requestUrl({
-      url,
-      method,
-      headers,
-      body: body,
-      contentType: headers["content-type"] || headers["Content-Type"],
-      throw: false,
-    });
+export function createHttp(token: string): HttpClient {
+  const impl = {
+    async request(req: GitHttpRequest): Promise<GitHttpResponse> {
+      const { url, method = "GET" } = req;
+      const headers: Record<string, string> = { ...(req.headers || {}) };
 
-    const resHeaders: Record<string, string> = {};
-    for (const key of Object.keys(res.headers || {})) {
-      resHeaders[key.toLowerCase()] = res.headers[key];
-    }
+      // Send credentials up front so we never depend on GitHub's 401 challenge
+      // (which `requestUrl` does not always surface back to isomorphic-git).
+      if (
+        token &&
+        !headers["Authorization"] &&
+        !headers["authorization"] &&
+        /githubusercontent\.com|github\.com/i.test(url)
+      ) {
+        headers["Authorization"] = authHeader(token);
+      }
 
-    return {
-      url,
-      method,
-      statusCode: res.status,
-      statusMessage: String(res.status),
-      headers: resHeaders,
-      body: [new Uint8Array(res.arrayBuffer)],
-    };
-  },
-};
+      const body = await collectBody(req.body);
 
-export const http = httpImpl as unknown as HttpClient;
+      const res = await requestUrl({
+        url,
+        method,
+        headers,
+        body: body,
+        contentType: headers["content-type"] || headers["Content-Type"],
+        throw: false,
+      });
+
+      if (res.status >= 400) {
+        let snippet = "";
+        try {
+          snippet = (res.text || "").slice(0, 300);
+        } catch {
+          /* ignore */
+        }
+        console.error(
+          `obsghsync HTTP ${res.status} ${method} ${url}\n${snippet}`,
+        );
+      }
+
+      const resHeaders: Record<string, string> = {};
+      for (const key of Object.keys(res.headers || {})) {
+        resHeaders[key.toLowerCase()] = res.headers[key];
+      }
+
+      return {
+        url,
+        method,
+        statusCode: res.status,
+        statusMessage: String(res.status),
+        headers: resHeaders,
+        body: [new Uint8Array(res.arrayBuffer)],
+      };
+    },
+  };
+
+  return impl as unknown as HttpClient;
+}
+

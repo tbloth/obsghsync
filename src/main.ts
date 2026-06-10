@@ -35,6 +35,12 @@ export default class GhSyncPlugin extends Plugin {
       callback: () => void this.runSetup(),
     });
 
+    this.addCommand({
+      id: "test-connection",
+      name: "Test GitHub connection",
+      callback: () => void this.testConnection(),
+    });
+
     if (this.settings.autoSyncOnStartup) {
       this.app.workspace.onLayoutReady(() => void this.runSync());
     }
@@ -77,6 +83,16 @@ export default class GhSyncPlugin extends Plugin {
       new StatusModal(this.app, changes).open();
     } catch (e) {
       this.fail("Status", e);
+    }
+  }
+
+  private async testConnection(): Promise<void> {
+    try {
+      new Notice("obsghsync: testing GitHub connection…");
+      const summary = await this.engine().testConnection();
+      new Notice(`obsghsync: ${summary}`, 12000);
+    } catch (e) {
+      this.fail("Test connection", e);
     }
   }
 
