@@ -69,6 +69,23 @@ export class GitEngine {
     }
   }
 
+  /** Query the remote (without fetching) for whether the configured branch exists. */
+  private async remoteHasBranch(): Promise<boolean> {
+    try {
+      const refs = await git.listServerRefs({
+        http: this.http,
+        url: this.settings.repoUrl,
+        onAuth: this.onAuth,
+        prefix: `refs/heads/${this.settings.branch}`,
+        protocolVersion: 1,
+      });
+      const target = `refs/heads/${this.settings.branch}`;
+      return refs.some((r) => r.ref === target);
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Ensure the working tree is on the configured branch. Lets the user change
    * the Branch setting and re-run Setup without recreating the repo (e.g. to
@@ -115,19 +132,21 @@ export class GitEngine {
 
     await this.ensureOnBranch();
 
-    await git.fetch({
-      ...this.common,
-      http: this.http,
-      remote: REMOTE,
-      onAuth: this.onAuth,
-      singleBranch: true,
-      ref: this.settings.branch,
-      tags: false,
-    }).catch(() => {
-      /* empty remote / branch not present yet — fine on first setup */
-    });
+    if (await this.remoteHasBranch()) {
+      await git.fetch({
+        ...this.common,
+        http: this.http,
+        remote: REMOTE,
+        onAuth: this.onAuth,
+        singleBranch: true,
+        ref: this.settings.branch,
+        tags: false,
+      }).catch(() => {
+        /* tolerate transient fetch issues during setup */
+      });
+      await this.mergeRemote();
+    }
 
-    await this.mergeRemote();
     return "Setup complete. Repository is connected and ready to sync.";
   }
 
@@ -144,16 +163,19 @@ export class GitEngine {
 
     let pulled = false;
     try {
-      await git.fetch({
-        ...this.common,
-        http: this.http,
-        remote: REMOTE,
-        onAuth: this.onAuth,
-        singleBranch: true,
-        ref: this.settings.branch,
-        tags: false,
-      });
-      pulled = await this.mergeRemote();
+      if (await this.remoteHasBranch()) {
+        await git.fetch({
+          ...this.common,
+          http: this.http,
+          remote: REMOTE,
+          onAuth: this.onAuth,
+          singleBranch: true,
+          ref: this.settings.branch,
+          tags: false,
+        });
+        pulled = await this.mergeRemote();
+      }
+      // else: remote branch does not exist yet — the push below creates it.
     } catch (e) {
       throw new Error(`Pull failed: ${errMsg(e)}`);
     }
