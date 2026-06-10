@@ -38,6 +38,12 @@ export default class GhSyncPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "reset-local-repo",
+      name: "Reset local git history (keep files)",
+      callback: () => void this.resetLocalRepo(),
+    });
+
+    this.addCommand({
       id: "test-connection",
       name: "Test GitHub connection",
       callback: () => void this.testConnection(),
@@ -65,6 +71,18 @@ export default class GhSyncPlugin extends Plugin {
       new Notice(`obsghsync: ${msg}`);
     } catch (e) {
       this.fail("Setup", e);
+    }
+  }
+
+  private async resetLocalRepo(): Promise<void> {
+    try {
+      await this.engine().resetLocalRepo();
+      new Notice(
+        "obsghsync: local git history purged. Run 'Setup repository' to start a clean history.",
+        10000,
+      );
+    } catch (e) {
+      this.fail("Reset", e);
     }
   }
 

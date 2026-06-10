@@ -12,6 +12,25 @@ if (typeof (window as unknown as { Buffer?: unknown }).Buffer === "undefined") {
 
 const DIR = "/";
 const REMOTE = "origin";
+const PLUGIN_DIR = ".obsidian/plugins/obsghsync";
+
+/**
+ * Paths that must NEVER be committed/pushed, regardless of .gitignore.
+ * Critically includes this plugin's own data.json, which stores the auth token —
+ * committing it triggers GitHub secret-scanning push protection (and leaks the
+ * token on repos without scanning).
+ */
+function isAlwaysIgnored(p: string): boolean {
+  const path = p.replace(/^\/+/, "");
+  if (path === PLUGIN_DIR || path.startsWith(PLUGIN_DIR + "/")) return true;
+  if (
+    path === ".obsidian/workspace.json" ||
+    path === ".obsidian/workspace-mobile.json"
+  ) {
+    return true;
+  }
+  return false;
+}
 
 export class GitEngine {
   private fs: ObsidianFs;
@@ -118,6 +137,32 @@ export class GitEngine {
     }
   }
 
+  /** Write a sensible default .gitignore if the vault doesn't have one. */
+  private async ensureGitignore(): Promise<void> {
+    if (await this.adapter.exists(".gitignore")) return;
+    const content =
+      [
+        "# obsghsync defaults — keep secrets and churn out of git",
+        `${PLUGIN_DIR}/`,
+        ".obsidian/workspace.json",
+        ".obsidian/workspace-mobile.json",
+        ".trash/",
+        ".DS_Store",
+      ].join("\n") + "\n";
+    await this.adapter.write(".gitignore", content);
+  }
+
+  /**
+   * Delete the local git history (the .git folder) while keeping all vault
+   * files. Used to recover from a history that contains a committed secret —
+   * a fresh Setup then creates a clean history without data.json.
+   */
+  async resetLocalRepo(): Promise<void> {
+    if (await this.adapter.exists(".git")) {
+      await this.adapter.rmdir(".git", true);
+    }
+  }
+
   /** Initialize the repo (if needed), wire up the remote, and merge remote state. */
   async setup(): Promise<string> {
     this.requireConfig();
@@ -129,6 +174,7 @@ export class GitEngine {
       });
     }
     await this.ensureRemote();
+    await this.ensureGitignore();
 
     // Make sure local work is captured before we pull remote history in.
     const staged = await this.stageAll();
@@ -232,6 +278,7 @@ export class GitEngine {
     const out: ChangedFile[] = [];
     for (const [path, head, workdir] of matrix) {
       if (head === 1 && workdir === 1) continue; // unchanged
+      if (isAlwaysIgnored(path)) continue;
       if (await git.isIgnored({ ...this.common, filepath: path })) continue;
       let state: ChangedFile["state"];
       if (workdir === 0) state = "deleted";
@@ -247,6 +294,14 @@ export class GitEngine {
     let count = 0;
     for (const [path, head, workdir, stage] of matrix) {
       if (head === 1 && workdir === 1 && stage === 1) continue;
+      if (isAlwaysIgnored(path)) {
+        // If it was tracked before (e.g. committed by an older version), untrack it.
+        if (head !== 0) {
+          await git.remove({ ...this.common, filepath: path });
+          count++;
+        }
+        continue;
+      }
       if (await git.isIgnored({ ...this.common, filepath: path })) continue;
       if (workdir === 0) {
         await git.remove({ ...this.common, filepath: path });
