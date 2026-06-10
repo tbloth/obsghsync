@@ -15,6 +15,7 @@ const REMOTE = "origin";
 
 export class GitEngine {
   private fs: ObsidianFs;
+  private forcePushNeeded = false;
 
   constructor(
     private adapter: DataAdapter,
@@ -109,6 +110,7 @@ export class GitEngine {
       throw new Error("Repository not initialized. Run 'Setup repository' first.");
     }
     await this.ensureRemote();
+    this.forcePushNeeded = false;
 
     const committed = await this.commitLocal();
 
@@ -136,7 +138,7 @@ export class GitEngine {
         remote: REMOTE,
         ref: this.settings.branch,
         onAuth: this.onAuth,
-        force: this.settings.conflictStrategy === "localWins",
+        force: this.forcePushNeeded,
       });
       pushed = !res.error;
       if (res.error) throw new Error(res.error);
@@ -272,6 +274,7 @@ export class GitEngine {
         return true;
       }
       // localWins: keep local history; push will be forced.
+      this.forcePushNeeded = true;
       new Notice("obsghsync: conflict resolved — local version kept (force push).");
       return false;
     }
