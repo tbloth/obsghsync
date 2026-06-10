@@ -1,8 +1,13 @@
 export type ConflictStrategy = "localWins" | "remoteWins";
 
+export type AuthMethod = "pat" | "oauth";
+
 export interface GhSyncSettings {
+  authMethod: AuthMethod;
   repoUrl: string;
   token: string;
+  oauthClientId: string;
+  oauthToken: string;
   branch: string;
   authorName: string;
   authorEmail: string;
@@ -12,8 +17,11 @@ export interface GhSyncSettings {
 }
 
 export const DEFAULT_SETTINGS: GhSyncSettings = {
+  authMethod: "pat",
   repoUrl: "",
   token: "",
+  oauthClientId: "",
+  oauthToken: "",
   branch: "main",
   authorName: "obsghsync",
   authorEmail: "obsghsync@users.noreply.github.com",

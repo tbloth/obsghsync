@@ -3,6 +3,8 @@ import { DEFAULT_SETTINGS, GhSyncSettings } from "./types";
 import { GitEngine } from "./git-engine";
 import { GhSyncSettingTab } from "./settings";
 import { StatusModal } from "./sync-modal";
+import { deviceFlowAuthenticate } from "./oauth";
+import { DeviceFlowModal } from "./device-flow-modal";
 
 export default class GhSyncPlugin extends Plugin {
   settings!: GhSyncSettings;
@@ -39,6 +41,12 @@ export default class GhSyncPlugin extends Plugin {
       id: "test-connection",
       name: "Test GitHub connection",
       callback: () => void this.testConnection(),
+    });
+
+    this.addCommand({
+      id: "sign-in-github",
+      name: "Sign in with GitHub (OAuth device flow)",
+      callback: () => void this.signIn(),
     });
 
     if (this.settings.autoSyncOnStartup) {
@@ -93,6 +101,36 @@ export default class GhSyncPlugin extends Plugin {
       new Notice(`obsghsync: ${summary}`, 12000);
     } catch (e) {
       this.fail("Test connection", e);
+    }
+  }
+
+  async signIn(): Promise<void> {
+    if (!this.settings.oauthClientId) {
+      new Notice(
+        "obsghsync: set an OAuth Client ID in settings first (Auth method: OAuth).",
+        10000,
+      );
+      return;
+    }
+    const modal = new DeviceFlowModal(this.app);
+    modal.open();
+    try {
+      const token = await deviceFlowAuthenticate(
+        this.settings.oauthClientId,
+        "repo",
+        {
+          onPrompt: (info) => modal.showCode(info),
+          isCancelled: () => modal.cancelled,
+        },
+      );
+      this.settings.oauthToken = token;
+      this.settings.authMethod = "oauth";
+      await this.saveSettings();
+      modal.setStatus("✅ Signed in. You can close this and run Sync.");
+      new Notice("obsghsync: signed in with GitHub.");
+    } catch (e) {
+      modal.setStatus("");
+      this.fail("Sign-in", e);
     }
   }
 
