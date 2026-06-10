@@ -181,6 +181,7 @@ export class GitEngine {
     }
 
     let pushed = false;
+    const serverMessages: string[] = [];
     try {
       const res = await git.push({
         ...this.common,
@@ -189,11 +190,25 @@ export class GitEngine {
         ref: this.settings.branch,
         onAuth: this.onAuth,
         force: this.forcePushNeeded,
+        onMessage: (m: string) => {
+          const t = String(m).trim();
+          if (t) serverMessages.push(t);
+        },
       });
+      const refError =
+        res.refs &&
+        Object.values(res.refs).find(
+          (r: { ok?: boolean; error?: string }) => r && r.error,
+        );
+      const err = res.error || (refError && refError.error);
+      if (err) throw new Error(String(err));
       pushed = !res.error;
-      if (res.error) throw new Error(res.error);
     } catch (e) {
-      throw new Error(`Push failed: ${errMsg(e)}`);
+      const detail = serverMessages.filter(Boolean).join(" | ");
+      if (detail) console.error("obsghsync push — server said:\n" + detail);
+      throw new Error(
+        `Push failed: ${errMsg(e)}${detail ? " — server: " + detail : ""}`,
+      );
     }
 
     return {
