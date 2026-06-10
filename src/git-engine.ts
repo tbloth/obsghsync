@@ -28,12 +28,18 @@ export class GitEngine {
     return { fs: this.fs, dir: DIR };
   }
 
+  private get credential(): string {
+    return this.settings.authMethod === "oauth"
+      ? this.settings.oauthToken
+      : this.settings.token;
+  }
+
   private get http() {
-    return createHttp(this.settings.token);
+    return createHttp(this.credential);
   }
 
   private onAuth = () => ({
-    username: this.settings.token,
+    username: this.credential,
     password: "x-oauth-basic",
   });
 
@@ -347,7 +353,13 @@ export class GitEngine {
 
   private requireConfig(): void {
     if (!this.settings.repoUrl) throw new Error("Repository URL is not set.");
-    if (!this.settings.token) throw new Error("Personal Access Token is not set.");
+    if (!this.credential) {
+      throw new Error(
+        this.settings.authMethod === "oauth"
+          ? "Not signed in. Run 'Sign in with GitHub' first."
+          : "Personal Access Token is not set.",
+      );
+    }
   }
 
   /**
@@ -359,7 +371,7 @@ export class GitEngine {
     this.requireConfig();
     const { owner, repo } = parseRepo(this.settings.repoUrl);
     const headers = {
-      Authorization: `Bearer ${this.settings.token}`,
+      Authorization: `Bearer ${this.credential}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "obsghsync",
