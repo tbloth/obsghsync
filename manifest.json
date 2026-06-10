@@ -1,0 +1,10 @@
+{
+  "id": "obsghsync",
+  "name": "GitHub Vault Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Sync your vault to and from GitHub. Works on desktop, iPadOS, and iOS using isomorphic-git (no native git binary required).",
+  "author": "tbloth",
+  "authorUrl": "https://github.com/tbloth",
+  "isDesktopOnly": false
+}

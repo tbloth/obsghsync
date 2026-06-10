@@ -1,0 +1,33 @@
+{
+  "name": "obsghsync",
+  "version": "0.1.0",
+  "description": "Sync your Obsidian vault to and from GitHub on all platforms (including iPadOS/iOS) using isomorphic-git.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "typecheck": "tsc -noEmit -skipLibCheck"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "github",
+    "sync",
+    "git",
+    "ipad",
+    "ios"
+  ],
+  "author": "tbloth",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.20.0",
+    "obsidian": "^1.5.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "buffer": "^6.0.3",
+    "isomorphic-git": "^1.25.0"
+  }
+}
