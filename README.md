@@ -22,16 +22,38 @@ a filesystem adapter over Obsidian's vault API and an HTTP layer over Obsidian's
 
 ## Setup
 
-1. Build (`npm install && npm run build`) or download a release.
+### Install via BRAT (recommended for iPad / iOS / beta)
+
+This plugin is distributed as a beta through
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) (Beta Reviewer's Auto-update
+Tool), which works on **iPadOS and iOS** as well as desktop.
+
+1. Install **BRAT** from Community Plugins and enable it.
+2. Run the command **"BRAT: Add a beta plugin for testing"**.
+3. Enter this repository: `tbloth/obsghsync`
+   (or the full URL `https://github.com/tbloth/obsghsync`).
+4. Leave the version blank to track the latest release, then choose **Add Plugin**.
+5. Enable **GitHub Vault Sync** in Community Plugins.
+6. Continue with the configuration steps below.
+
+BRAT will auto-update the plugin whenever a new release is published.
+
+### Manual install
+
+1. Build (`npm install && npm run build`) or download `main.js` + `manifest.json`
+   from a [release](https://github.com/tbloth/obsghsync/releases).
 2. Copy `main.js`, `manifest.json` into your vault's
    `.obsidian/plugins/obsghsync/` folder and enable the plugin.
-3. Open **Settings → GitHub Vault Sync**:
+
+### Configure
+
+1. Open **Settings → GitHub Vault Sync**:
    - **Repository URL** — HTTPS, e.g. `https://github.com/you/vault.git`
    - **Personal Access Token** — a [PAT](https://github.com/settings/tokens)
      with `repo` scope (or a fine-grained token with *Contents: read & write*)
    - **Branch** — defaults to `main`
-4. Run the command **"GitHub Vault Sync: Setup repository"** once.
-5. Run **"GitHub Vault Sync: Sync now"** whenever you want to sync.
+2. Run the command **"GitHub Vault Sync: Setup repository"** once.
+3. Run **"GitHub Vault Sync: Sync now"** whenever you want to sync.
 
 ## Commands
 
